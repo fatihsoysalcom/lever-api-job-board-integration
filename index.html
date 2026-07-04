@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kariyer Sayfası | Lever API Entegrasyonu</title>
+    <!-- Tailwind CSS modern ve hızlı arayüz tasarımı için kullanılmıştır -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 py-6">
+        <div class="max-w-5xl mx-auto px-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Bizimle Çalışın</h1>
+                <p class="text-sm text-slate-500 mt-1">Lever API entegrasyonu ile anlık güncellenen açık pozisyonlar</p>
+            </div>
+            <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Lever API Aktif</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        
+        <!-- Filtreleme Alanı -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row gap-4">
+            <div class="flex-1">
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pozisyon Ara</label>
+                <input type="text" id="searchInput" placeholder="Örn: Software Engineer..." 
+                       class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+            </div>
+            <div class="w-full md:w-48">
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Departman</label>
+                <select id="deptFilter" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    <option value="">Tümü</option>
+                </select>
+            </div>
+            <div class="w-full md:w-48">
+                <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Lokasyon</label>
+                <select id="locFilter" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                    <option value="">Tümü</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Yükleniyor ve Hata Durumları -->
+        <div id="loadingState" class="text-center py-12">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p class="text-slate-500">Açık pozisyonlar yükleniyor...</p>
+        </div>
+
+        <div id="errorState" class="hidden bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-center">
+            İş ilanları yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyiniz.
+        </div>
+
+        <!-- İş İlanları Listesi -->
+        <div id="jobsContainer" class="space-y-4 hidden">
+            <!-- Dinamik ilan kartları buraya eklenecek -->
+        </div>
+
+        <!-- İlan Yok Durumu -->
+        <div id="emptyState" class="hidden text-center py-12 bg-white rounded-xl border border-slate-200">
+            <p class="text-slate-500">Aradığınız kriterlere uygun iş ilanı bulunamadı.</p>
+        </div>
+    </main>
+
+    <script>
+        // Lever API için kullanılacak örnek şirket ID'si (Public API)
+        // Kendi şirketinizin ilanlarını çekmek için 'leverdemo' yerine kendi Lever şirket adınızı yazın.
+        const LEVER_COMPANY_ID = 'leverdemo'; 
+        const API_URL = `https://api.lever.co/v0/postings/${LEVER_COMPANY_ID}?mode=json`;
+
+        let allJobs = [];
+
+        // DOM Elemanları
+        const jobsContainer = document.getElementById('jobsContainer');
+        const loadingState = document.getElementById('loadingState');
+        const errorState = document.getElementById('errorState');
+        const emptyState = document.getElementById('emptyState');
+        const searchInput = document.getElementById('searchInput');
+        const deptFilter = document.getElementById('deptFilter');
+        const locFilter = document.getElementById('locFilter');
+
+        // Lever API'den verileri çeken fonksiyon
+        async function fetchJobs() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('API yanıt vermedi');
+                allJobs = await response.json();
+                
+                // Filtreleri doldur ve ilanları listele
+                populateFilters(allJobs);
+                renderJobs(allJobs);
+                
+                loadingState.classList.add('hidden');
+                jobsContainer.classList.remove('hidden');
+            } catch (error) {
+                console.error('Lever API Hatası:', error);
+                loadingState.classList.add('hidden');
+                errorState.classList.remove('hidden');
+            }
+        }
+
+        // Departman ve Lokasyon filtrelerini dinamik olarak doldurur
+        function populateFilters(jobs) {
+            const departments = new Set();
+            const locations = new Set();
+
+            jobs.forEach(job => {
+                if (job.categories && job.categories.department) departments.add(job.categories.department);
+                if (job.categories && job.categories.location) locations.add(job.categories.location);
+            });
+
+            departments.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                deptFilter.appendChild(option);
+            });
+
+            locations.forEach(loc => {
+                const option = document.createElement('option');
+                option.value = loc;
+                option.textContent = loc;
+                locFilter.appendChild(option);
+            });
+        }
+
+        // İlanları HTML olarak ekrana basar
+        function renderJobs(jobs) {
+            jobsContainer.innerHTML = '';
+            
+            if (jobs.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            jobs.forEach(job => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-indigo-500 transition-all duration-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4";
+                
+                // Lever API'den gelen verilerin haritalanması
+                const title = job.text;
+                const department = job.categories ? job.categories.department : 'Genel';
+                const location = job.categories ? job.categories.location : 'Uzaktan';
+                const commitment = job.categories ? job.categories.commitment : 'Tam Zamanlı';
+                const applyUrl = job.applyUrl;
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-0.5 rounded">${department}</span>
+                            <span class="bg-slate-100 text-slate-600 text-xs font-medium px-2.5 py-0.5 rounded">${commitment}</span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-900">${title}</h3>
+                        <p class="text-sm text-slate-500 mt-1 flex items-center gap-1">
+                            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            ${location}
+                        </p>
+                    </div>
+                    <div>
+                        <a href="${applyUrl}" target="_blank" rel="noopener noreferrer" 
+                           class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors duration-150">
+                            Başvur
+                        </a>
+                    </div>
+                `;
+                jobsContainer.appendChild(card);
+            });
+        }
+
+        // Arama ve Filtreleme mekanizması
+        function filterJobs() {
+            const searchQuery = searchInput.value.toLowerCase();
+            const selectedDept = deptFilter.value;
+            const selectedLoc = locFilter.value;
+
+            const filtered = allJobs.filter(job => {
+                const matchesSearch = job.text.toLowerCase().includes(searchQuery);
+                const matchesDept = !selectedDept || (job.categories && job.categories.department === selectedDept);
+                const matchesLoc = !selectedLoc || (job.categories && job.categories.location === selectedLoc);
+                return matchesSearch && matchesDept && matchesLoc;
+            });
+
+            renderJobs(filtered);
+        }
+
+        // Event Listeners
+        searchInput.addEventListener('input', filterJobs);
+        deptFilter.addEventListener('change', filterJobs);
+        locFilter.addEventListener('change', filterJobs);
+
+        // Uygulamayı başlat
+        fetchJobs();
+    </script>
+</body>
+</html>
